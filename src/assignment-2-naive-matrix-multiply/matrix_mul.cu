@@ -16,16 +16,14 @@ __global__ void matrixMultiply(float *A, float *B, float *C, int numARows,
                                int numAColumns, int numBRows, int numBColumns,
                                int numCRows, int numCColumns) {
   //@@ Insert code to implement matrix multiplication here
-  // For matrixmul, numAColumns == numBRows
   float entry = 0;
-  int x = threadIdx.x;
-  int y = threadIdx.y;
-  // if (y < numCRows && x < numCColumns) {
-  if (true) {
+  int x = blockDim.x * blockIdx.x + threadIdx.x;
+  int y = blockDim.y * blockIdx.y + threadIdx.y;
+  if (y < numCRows && x < numCColumns) {
     for (int i = 0; i < numAColumns; ++i) {
       entry += A[y * numAColumns + i] * B[i * numBColumns + x];
     }
-    C[y * numCColumns + x] = 3;
+    C[y * numCColumns + x] = entry;
   }
 }
 
@@ -62,7 +60,6 @@ int main(int argc, char **argv) {
 
   wbLog(TRACE, "The dimensions of A are ", numARows, " x ", numAColumns);
   wbLog(TRACE, "The dimensions of B are ", numBRows, " x ", numBColumns);
-  wbLog(TRACE, "The dimensions of C are ", numCRows, " x ", numCColumns);
 
   wbTime_start(GPU, "Allocating GPU memory.");
   //@@ Allocate GPU memory here
@@ -75,18 +72,20 @@ int main(int argc, char **argv) {
   //@@ Copy memory to the GPU here
   wbCheck(cudaMemcpy(deviceA, hostA, numARows * numAColumns * sizeof(float),
                      cudaMemcpyHostToDevice));
-  wbCheck(cudaMemcpy(deviceB, hostB, 128 * 64 * sizeof(float),
+  wbCheck(cudaMemcpy(deviceB, hostB, numBRows * numBColumns * sizeof(float),
                      cudaMemcpyHostToDevice));
-
   wbTime_stop(GPU, "Copying input memory to the GPU.");
 
   //@@ Initialize the grid and block dimensions here
-  dim3 gridDim(1, 1, 1);
-  dim3 blkDim(numCColumns, numCRows, 1);
+  dim3 dimBlk(32, 32);
+  dim3 dimGrid(numCColumns % dimBlk.x ? numCColumns / dimBlk.x + 1
+                                      : numCColumns / dimBlk.x,
+               numCRows % dimBlk.y ? numCRows / dimBlk.y + 1
+                                   : numCRows / dimBlk.y);
 
   wbTime_start(Compute, "Performing CUDA computation");
   //@@ Launch the GPU Kernel here
-  matrixMultiply<<<gridDim, blkDim>>>(deviceA, deviceB, deviceC, numARows,
+  matrixMultiply<<<dimGrid, dimBlk>>>(deviceA, deviceB, deviceC, numARows,
                                       numAColumns, numBRows, numBColumns,
                                       numCRows, numCColumns);
   cudaDeviceSynchronize();
