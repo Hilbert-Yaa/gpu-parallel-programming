@@ -1,4 +1,3 @@
-#include <__clang_cuda_builtin_vars.h>
 #include <wb.h>
 
 #define wbCheck(stmt)                                                          \
@@ -13,7 +12,7 @@
 
 __global__ void vecAdd(float *in1, float *in2, float *out, int len) {
   //@@ Insert code to implement vector addition here
-  int i = blockIdx.x * blockDim.x + threadIdx;
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
   if (i < len)
     out[i] = in1[i] + in2[i];
 }
@@ -29,26 +28,26 @@ int main(int argc, char **argv) {
   float *deviceOutput;
 
   args = wbArg_read(argc, argv);
-
   wbTime_start(Generic, "Importing data and creating memory on host");
   hostInput1 = (float *)wbImport(wbArg_getInputFile(args, 0), &inputLength);
   hostInput2 = (float *)wbImport(wbArg_getInputFile(args, 1), &inputLength);
-  hostOutput = (float *)malloc(inputLength * sizeof(float));
+  size_t size = inputLength * sizeof(float);
+  hostOutput = (float *)malloc(size);
   wbTime_stop(Generic, "Importing data and creating memory on host");
 
   wbLog(TRACE, "The input length is ", inputLength);
 
   wbTime_start(GPU, "Allocating GPU memory.");
   //@@ Allocate GPU memory here
-  cudaMalloc((void **)&deviceInput1, inputLength * sizeof(float));
-  cudaMalloc((void **)&deviceInput2, inputLength * sizeof(float));
-  cudaMalloc((void **)&deviceOutput, inputLength * sizeof(float));
+  cudaMalloc((void **)&deviceInput1, size);
+  cudaMalloc((void **)&deviceInput2, size);
+  cudaMalloc((void **)&deviceOutput, size);
   wbTime_stop(GPU, "Allocating GPU memory.");
 
   wbTime_start(GPU, "Copying input memory to the GPU.");
   //@@ Copy memory to the GPU here
-  cudaMemcpy(deviceInput1, hostInput1, cudaMemcpyHostToDevice);
-  cudaMemcpy(deviceInput2, hostInput2, cudaMemcpyHostToDevice);
+  cudaMemcpy(deviceInput1, hostInput1, size, cudaMemcpyHostToDevice);
+  cudaMemcpy(deviceInput2, hostInput2, size, cudaMemcpyHostToDevice);
   wbTime_stop(GPU, "Copying input memory to the GPU.");
 
   //@@ Initialize the grid and block dimensions here
@@ -65,8 +64,7 @@ int main(int argc, char **argv) {
 
   wbTime_start(Copy, "Copying output memory to the CPU");
   //@@ Copy the GPU memory back to the CPU here
-  cudaMemcpy(hostOutput, deviceOutput, inputLength * sizeof(float),
-             cudaMemcpyDeviceToHost);
+  cudaMemcpy(hostOutput, deviceOutput, size, cudaMemcpyDeviceToHost);
   wbTime_stop(Copy, "Copying output memory to the CPU");
 
   wbTime_start(GPU, "Freeing GPU Memory");
