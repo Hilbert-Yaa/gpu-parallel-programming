@@ -1,32 +1,40 @@
 
 #include <wb.h>
 
-#define wbCheck(stmt)                                                     \
-  do {                                                                    \
-    cudaError_t err = stmt;                                               \
-    if (err != cudaSuccess) {                                             \
-      wbLog(ERROR, "Failed to run stmt ", #stmt);                         \
-      wbLog(ERROR, "Got CUDA error ...  ", cudaGetErrorString(err));      \
-      return -1;                                                          \
-    }                                                                     \
+#define wbCheck(stmt)                                                          \
+  do {                                                                         \
+    cudaError_t err = stmt;                                                    \
+    if (err != cudaSuccess) {                                                  \
+      wbLog(ERROR, "Failed to run stmt ", #stmt);                              \
+      wbLog(ERROR, "Got CUDA error ...  ", cudaGetErrorString(err));           \
+      return -1;                                                               \
+    }                                                                          \
   } while (0)
 
 // Compute C = A * B
-__global__ void matrixMultiplyShared(float *A, float *B, float *C,
-                                     int numARows, int numAColumns,
-                                     int numBRows, int numBColumns,
-                                     int numCRows, int numCColumns) {
+__global__ void matrixMultiplyShared(float *A, float *B, float *C, int numARows,
+                                     int numAColumns, int numBRows,
+                                     int numBColumns, int numCRows,
+                                     int numCColumns) {
   //@@ Insert code to implement matrix multiplication here
   //@@ You have to use shared memory for this MP
+  int Width = numAColumns;
+  __shared__ float aTile[32][32], bTile[32][32]; // block dim set to 32.
   float entry = 0;
-  int x = blockDim.x * blockIdx.x + threadIdx.x;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
-  if (y < numCRows && x < numCColumns) {
-    for (int i = 0; i < numAColumns; ++i) {
-      entry += A[y * numAColumns + i] * B[i * numBColumns + x];
+  int x = blockDim.x * blockIdx.x + threadIdx.x;
+  int ty = threadIdx.y;
+  int tx = threadIdx.x;
+  for (int i = 0; i < Width / 32; ++i) {
+    aTile[ty][tx] = A[y * numAColumns + i * 32 + tx];
+    bTile[ty][tx] = B[(i * 32 + ty) * numAColumns + x];
+    __syncthreads();
+    for (int k = 0; k < 32; ++k) {
+      entry += aTile[ty][k] * bTile[k][tx];
     }
-    C[y * numCColumns + x] = entry;
+    __syncthreads();
   }
+  C[y * numCColumns + x] = entry;
 }
 
 int main(int argc, char **argv) {
@@ -48,10 +56,10 @@ int main(int argc, char **argv) {
   args = wbArg_read(argc, argv);
 
   wbTime_start(Generic, "Importing data and creating memory on host");
-  hostA = (float *)wbImport(wbArg_getInputFile(args, 0), &numARows,
-                            &numAColumns);
-  hostB = (float *)wbImport(wbArg_getInputFile(args, 1), &numBRows,
-                            &numBColumns);
+  hostA =
+      (float *)wbImport(wbArg_getInputFile(args, 0), &numARows, &numAColumns);
+  hostB =
+      (float *)wbImport(wbArg_getInputFile(args, 1), &numBRows, &numBColumns);
   //@@ Set numCRows and numCColumns
   numCRows = numARows;
   numCColumns = numBColumns;
@@ -86,9 +94,9 @@ int main(int argc, char **argv) {
 
   wbTime_start(Compute, "Performing CUDA computation");
   //@@ Launch the GPU Kernel here
-  matrixMultiply<<<dimGrid, dimBlk>>>(deviceA, deviceB, deviceC, numARows,
-    numAColumns, numBRows, numBColumns,
-    numCRows, numCColumns);
+  matrixMultiplyShared<<<dimGrid, dimBlk>>>(deviceA, deviceB, deviceC, numARows,
+                                            numAColumns, numBRows, numBColumns,
+                                            numCRows, numCColumns);
   cudaDeviceSynchronize();
   wbTime_stop(Compute, "Performing CUDA computation");
 
