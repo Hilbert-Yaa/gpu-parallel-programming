@@ -24,24 +24,29 @@ __global__ void matrixMultiplyShared(float *A, float *B, float *C, int numARows,
   float entry = 0;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
   int x = blockDim.x * blockIdx.x + threadIdx.x;
-  if (y >= numCRows || x >= numCColumns)
-    return;
   int by = blockIdx.y;
   int bx = blockIdx.x;
   int ty = threadIdx.y;
   int tx = threadIdx.x;
-  for (int i = 0; i < Width / BLK_DIM; ++i) {
-    float *Asub = A + numAColumns * by * BLK_DIM + i * BLK_DIM;
-    float *Bsub = B + numBColumns * i * BLK_DIM + bx * BLK_DIM;
-    aTile[ty][tx] = Asub[ty * numAColumns + tx];
-    bTile[ty][tx] = Bsub[ty * numBColumns + tx];
+  for (int i = 0; i < (Width - 1) / BLK_DIM + 1; ++i) {
+    if (y < numARows && i * BLK_DIM + tx < numAColumns) {
+      float *Asub = A + numAColumns * by * BLK_DIM + i * BLK_DIM;
+      aTile[ty][tx] = Asub[ty * numAColumns + tx];
+    } else
+      aTile[ty][tx] = 0;
+    if (x < numBColumns && i * BLK_DIM + ty < numBRows) {
+      float *Bsub = B + numBColumns * i * BLK_DIM + bx * BLK_DIM;
+      bTile[ty][tx] = Bsub[ty * numBColumns + tx];
+    } else
+      bTile[ty][tx] = 0;
     __syncthreads();
     for (int k = 0; k < BLK_DIM; ++k) {
       entry += aTile[ty][k] * bTile[k][tx];
     }
     __syncthreads();
   }
-  C[y * numCColumns + x] = entry;
+  if (y <= numCRows && x <= numCColumns)
+    C[y * numCColumns + x] = entry;
 }
 
 int main(int argc, char **argv) {
