@@ -1,6 +1,6 @@
 
 #include <wb.h>
-
+#define BLK_DIM 32
 #define wbCheck(stmt)                                                          \
   do {                                                                         \
     cudaError_t err = stmt;                                                    \
@@ -19,17 +19,24 @@ __global__ void matrixMultiplyShared(float *A, float *B, float *C, int numARows,
   //@@ Insert code to implement matrix multiplication here
   //@@ You have to use shared memory for this MP
   int Width = numAColumns;
-  __shared__ float aTile[32][32], bTile[32][32]; // block dim set to 32.
+  __shared__ float aTile[BLK_DIM][BLK_DIM],
+      bTile[BLK_DIM][BLK_DIM]; // block dim set to 32.
   float entry = 0;
   int y = blockDim.y * blockIdx.y + threadIdx.y;
   int x = blockDim.x * blockIdx.x + threadIdx.x;
+  if (y >= numCRows || x >= numCColumns)
+    return;
+  int by = blockIdx.y;
+  int bx = blockIdx.x;
   int ty = threadIdx.y;
   int tx = threadIdx.x;
-  for (int i = 0; i < Width / 32; ++i) {
-    aTile[ty][tx] = A[y * numAColumns + i * 32 + tx];
-    bTile[ty][tx] = B[(i * 32 + ty) * numAColumns + x];
+  for (int i = 0; i < Width / BLK_DIM; ++i) {
+    float *Asub = A + numAColumns * by * BLK_DIM + i * BLK_DIM;
+    float *Bsub = B + numBColumns * i * BLK_DIM + bx * BLK_DIM;
+    aTile[ty][tx] = Asub[ty * numAColumns + tx];
+    bTile[ty][tx] = Bsub[ty * numBColumns + tx];
     __syncthreads();
-    for (int k = 0; k < 32; ++k) {
+    for (int k = 0; k < BLK_DIM; ++k) {
       entry += aTile[ty][k] * bTile[k][tx];
     }
     __syncthreads();
