@@ -22,19 +22,19 @@ __global__ void matrixMultiplyShared(float *A, float *B, float *C, int numARows,
   __shared__ float aTile[BLK_DIM][BLK_DIM],
       bTile[BLK_DIM][BLK_DIM]; // block dim set to 32.
   float entry = 0;
-  int y = blockDim.y * blockIdx.y + threadIdx.y;
-  int x = blockDim.x * blockIdx.x + threadIdx.x;
   int by = blockIdx.y;
   int bx = blockIdx.x;
   int ty = threadIdx.y;
   int tx = threadIdx.x;
+  int y = BLK_DIM * by + ty;
+  int x = BLK_DIM * bx + tx;
   for (int i = 0; i < (Width - 1) / BLK_DIM + 1; ++i) {
-    if (y < numARows && i * BLK_DIM + tx < numAColumns) {
+    if (y < numARows && (i * BLK_DIM + tx < numAColumns)) {
       float *Asub = A + numAColumns * by * BLK_DIM + i * BLK_DIM;
       aTile[ty][tx] = Asub[ty * numAColumns + tx];
     } else
       aTile[ty][tx] = 0;
-    if (x < numBColumns && i * BLK_DIM + ty < numBRows) {
+    if (i * BLK_DIM + ty < numBRows && x < numBColumns) {
       float *Bsub = B + numBColumns * i * BLK_DIM + bx * BLK_DIM;
       bTile[ty][tx] = Bsub[ty * numBColumns + tx];
     } else
@@ -45,7 +45,7 @@ __global__ void matrixMultiplyShared(float *A, float *B, float *C, int numARows,
     }
     __syncthreads();
   }
-  if (y <= numCRows && x <= numCColumns)
+  if (y < numCRows && x < numCColumns)
     C[y * numCColumns + x] = entry;
 }
 
@@ -98,7 +98,7 @@ int main(int argc, char **argv) {
   wbTime_stop(GPU, "Copying input memory to the GPU.");
 
   //@@ Initialize the grid and block dimensions here
-  dim3 dimBlk(32, 32);
+  dim3 dimBlk(BLK_DIM, BLK_DIM);
   dim3 dimGrid(numCColumns % dimBlk.x ? numCColumns / dimBlk.x + 1
                                       : numCColumns / dimBlk.x,
                numCRows % dimBlk.y ? numCRows / dimBlk.y + 1
