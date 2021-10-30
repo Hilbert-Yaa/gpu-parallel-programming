@@ -94,7 +94,7 @@ int main(int argc, char **argv)
 
   wbTime_start(Compute, "Performing CUDA computation");
   //Launch the GPU Kernel
-  dim3 dimGrid((numInputElements - 1) / BLOCK_SIZE + 1, 1, 1);
+  dim3 dimGrid(ceil((numInputElements - 1) / float(BLOCK_SIZE << 1)), 1, 1);
   dim3 dimBlock(BLOCK_SIZE, 1, 1);
 
   total<<<dimGrid, dimBlock, (BLOCK_SIZE + 1) * sizeof(float)>>>(deviceInput, deviceOutput, numOutputElements);
