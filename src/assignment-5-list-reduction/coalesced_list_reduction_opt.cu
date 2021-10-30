@@ -17,7 +17,9 @@
     }                                                                \
   } while (0)
 
-__device__ void warpReduce(volatile float* sdata, int tid) {
+__device__ void warpReduce(volatile float *sdata, int tid)
+{
+  __syncthreads();
   sdata[tid] += sdata[tid + 32];
   sdata[tid] += sdata[tid + 16];
   sdata[tid] += sdata[tid + 8];
@@ -32,17 +34,17 @@ __global__ void total(float *input, float *output, int len)
   unsigned int tid = threadIdx.x;
   unsigned int i = blockIdx.x * (blockDim.x * 2) + threadIdx.x;
   sdata[tid] = input[i] + input[i + blockDim.x];
-  __syncthreads();
   for (unsigned int s = blockDim.x / 2; s > 32; s >>= 1)
   {
+    __syncthreads();
     if (tid < s)
     {
       sdata[tid] += sdata[tid + s];
     }
-    __syncthreads();
   }
 
-  if (tid < 32) warpReduce(sdata, tid);
+  if (tid < 32)
+    warpReduce(sdata, tid);
   if (tid == 0)
     output[blockIdx.x] = sdata[0];
 }

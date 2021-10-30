@@ -54,10 +54,6 @@ int main(int argc, char **argv)
       (float *)wbImport(wbArg_getInputFile(args, 0), &numInputElements);
 
   numOutputElements = ceil(numInputElements / float(BLOCK_SIZE << 1));
-  if (numInputElements % (BLOCK_SIZE << 1))
-  {
-    numOutputElements++;
-  }
   hostOutput = (float *)malloc(numOutputElements * sizeof(float));
 
   wbTime_stop(Generic, "Importing data and creating memory on host");
