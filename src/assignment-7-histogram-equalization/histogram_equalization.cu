@@ -32,8 +32,8 @@ __global__ void GS2RGB(float *output, unsigned char *input, int size) {
 __global__ void calcHistogram(float *histogram, unsigned char *input, int size,
                               bool priv) {
   if (priv) {
-    // privatization opt, debug needed
-    __shared__ unsigned int cache[HISTOGRAM_SIZE];
+    // privatization opt, faster atomic Op with smem
+    __shared__ float cache[HISTOGRAM_SIZE];
     if (threadIdx.x < HISTOGRAM_SIZE)
       cache[threadIdx.x] = 0;
     __syncthreads();
@@ -135,7 +135,7 @@ int main(int argc, char **argv) {
   // GS2RGB<<<gridDim, BLOCK_SIZE>>> (deviceGSImageData, deviceOutputImageData,
   // imageSize); // debug-only
   calcHistogram<<<gridDimGS, BLOCK_SIZE>>>(deviceHistogram, deviceGSImageData, 
-                                           imageSize, false);
+                                           imageSize, true);
   calcCDF<<<1, HISTOGRAM_SIZE>>>(
       cdf, deviceHistogram, imageSize);
   equalHistogram<<<gridDimRGB, BLOCK_SIZE>>>(deviceOutputImageData,
