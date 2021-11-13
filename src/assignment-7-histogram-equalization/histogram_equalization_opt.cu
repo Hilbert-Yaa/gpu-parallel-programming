@@ -38,21 +38,15 @@ __global__ void calcHistogram(float *histogram, unsigned char *input, int size,
       cache[threadIdx.x] = 0;
     __syncthreads();
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int stride = blockDim.x * gridDim.x;
-    while (tid < size) {
+    if (tid < size)
       atomicAdd(&(cache[input[tid]]), 1);
-      tid += stride;
-    }
     __syncthreads();
     if (threadIdx.x < HISTOGRAM_SIZE)
       atomicAdd(&(histogram[threadIdx.x]), cache[threadIdx.x]);
   } else {
     int tid = blockDim.x * blockIdx.x + threadIdx.x;
-    int stride = blockDim.x * gridDim.x;
-    while (tid < size) {
+    if (tid < size)
       atomicAdd(&(histogram[input[tid]]), 1);
-      tid += stride;
-    }
   }
 }
 
@@ -132,17 +126,15 @@ int main(int argc, char **argv) {
   // launch CUDA kernels
   RGB2GS<<<gridDimRGB, BLOCK_SIZE>>>(deviceGSImageData, deviceInputImageData, 
                                      imageSize);
-  // GS2RGB<<<gridDim, BLOCK_SIZE>>> (deviceGSImageData, deviceOutputImageData,
-  // imageSize); // debug-only
   calcHistogram<<<gridDimGS, BLOCK_SIZE>>>(deviceHistogram, deviceGSImageData, 
-                                           imageSize, true);
-  clock_t t0 = clock();
-  for(int i = 0; i < 300000; i++) {
+                                        imageSize, false);
+  // clock_t t0 = clock();
+  // for(int i = 0; i < 300000; i++) {
   calcCDF<<<1, HISTOGRAM_SIZE>>>(
       cdf, deviceHistogram, imageSize);    
-  }
-  clock_t t1 = clock();
-  printf("Time elapsed: %f\n", float(t1 - t0)/CLOCKS_PER_SEC);
+  // }
+  // clock_t t1 = clock();
+  // printf("Time elapsed: %f\n", float(t1 - t0)/CLOCKS_PER_SEC);
   equalHistogram<<<gridDimRGB, BLOCK_SIZE>>>(deviceOutputImageData,
                                                 deviceInputImageData, cdf,
                                                 imageSize * imageChannels);
